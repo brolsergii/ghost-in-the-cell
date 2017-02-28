@@ -178,7 +178,7 @@ class Player
             int presentBots = factories.Where(x => x.id == dest.Key).FirstOrDefault().cyborgsNum;
             int productionBots = TryGetInt(() => factories.Where(x => x.id == dest.Key && x.player == -1).FirstOrDefault().cyborgsProduction * 3);
             int enemySendBots = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
-            int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
+            int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum - x.roundsToGo / 2)?.Aggregate((x, y) => x + y) ?? 0));
             int neededBots = presentBots + productionBots + enemySendBots - mySendBots + 1;
             if (neededBots < 0)
                 neededBots = 0;
@@ -226,7 +226,7 @@ class Player
                 BombesCoolDown = 10;
             }
             actions.AddRange(batchActions);
-            //Deb($"[{dest.Key}]: Need {initNeededBots} ({presentBots}+{productionBots}+{enemySendBots}-{mySendBots}+1). Can send {canSend}");
+            Deb($"[{dest.Key}]: Need {initNeededBots} ({presentBots}+{productionBots}+{enemySendBots}-{mySendBots}+1). Can send {canSend}");
         }
         return actions;
     }
