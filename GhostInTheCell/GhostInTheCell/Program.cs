@@ -189,7 +189,7 @@ class Player
             bool willBomb = false;
             if (CanBomb() && neededBots > 9 && !underBombing.Contains(dest.Key))
             {
-                Deb($"CanBomb {CanBomb()}");
+                //Deb($"CanBomb {CanBomb()}");
                 batchActions.Add($"BOMB {factories.Where(x => x.player == 1).FirstOrDefault().id} {dest.Key}");
                 neededBots -= 10;
                 canSend += 10;
