@@ -57,13 +57,11 @@ class Player
         {
             BombesLeft--;
             BombesCoolDown = 11;
-            //Deb("1st condition bombing (early prevention)");
             return factoryDestinations.FirstOrDefault().id;
         }
         if (BombesCoolDown > 0)
         {
             BombesCoolDown--;
-            //Deb("No bombing (cooldown)");
             return null;
         }
         else
@@ -83,7 +81,6 @@ class Player
             {
                 BombesLeft--;
                 BombesCoolDown = 11;
-                //Deb("2nd condition bombing (too crowded)");
                 return target;
             }
         }
@@ -140,9 +137,29 @@ class Player
     static List<string> ActionForDefenseMove(Dictionary<int, int> defenseMoves)
     {
         var actions = new List<string>();
-        foreach (var factoryToDefend in defenseMoves)
+        foreach (var factoryToDefend in defenseMoves.OrderByDescending(x => x.Value))
         {
-
+            int needBots = factoryToDefend.Value;
+            var myFactories = factories.Where(x => x.player == 1);
+            foreach (var donor in myFactories)
+            {
+                if (donor.cyborgsNum > needBots)
+                {
+                    donor.cyborgsNum -= needBots;
+                    needBots = 0;
+                    if (donor.id != factoryToDefend.Key)
+                        actions.Add($"MOVE {donor.id} {factoryToDefend.Key} {needBots}");
+                }
+                else if (donor.cyborgsNum > donor.cyborgsProduction)
+                {
+                    needBots -= donor.cyborgsNum - donor.cyborgsProduction;
+                    if (donor.id != factoryToDefend.Key)
+                        actions.Add($"MOVE {donor.id} {factoryToDefend.Key} {donor.cyborgsNum - donor.cyborgsProduction}");
+                    donor.cyborgsNum = donor.cyborgsProduction;
+                }
+                if (needBots == 0)
+                    break;
+            }
         }
         return actions;
     }
@@ -151,9 +168,9 @@ class Player
     {
         var actions = new List<string>();
         BombesCoolDown--;
-        int? improve = NeedToImprove();
-        if (improve != null)
-            actions.Add($"INC {improve}");
+        int? improveId = NeedToImprove();
+        if (improveId != null)
+            actions.Add($"INC {improveId}");
 
         var myFactories = factories.Where(x => x.player == 1);
         foreach (var dest in attackMoves.OrderBy(x => -x.Value))
@@ -168,6 +185,7 @@ class Player
             int initNeededBots = neededBots;
             int canSend = 0;
             var batchActions = new List<string>();
+
             bool willBomb = false;
             if (CanBomb() && neededBots > 9 && !underBombing.Contains(dest.Key))
             {
@@ -227,6 +245,8 @@ class Player
             int distance = int.Parse(inputs[2]);
             MAP[factory1, factory2] = MAP[factory2, factory1] = distance;
         }
+        string message = "MSG All attack!!!";
+
         while (true)
         {
             factories = new List<Factory>();
@@ -249,19 +269,20 @@ class Player
             }
 
             var defenseMoves = BestDefenseDestination();
-            DebDict(defenseMoves);
             var attackMoves = BestAttackDestination();
-            int bestAttack = attackMoves.OrderBy(x => x.Value).Select(x => x.Key).LastOrDefault();
-            string message = "MSG " + (attackMoves.Count == 0 ? "No good attack" : $"All attack the capitalists in {bestAttack}");
-            if (attackMoves.Count == 0)
+            if (attackMoves.Count == 0 && defenseMoves.Count == 0)
                 Console.WriteLine($"WAIT;{message}");
             else
             {
-                var moves = ActionForAttackMove(attackMoves);
-                if (moves.Count == 0)
+                var dmoves = ActionForDefenseMove(defenseMoves);
+                var amoves = ActionForAttackMove(attackMoves);
+                if (amoves.Count == 0 && dmoves.Count == 0)
                     Console.WriteLine($"WAIT;{message}");
                 else
-                    Console.WriteLine(moves.Aggregate((x, y) => $"{x};{y}") + ";" + message);
+                {
+                    dmoves.AddRange(amoves);
+                    Console.WriteLine(dmoves.Aggregate((x, y) => $"{x};{y}") + ";" + message);
+                }
             }
         }
     }
