@@ -1,0 +1,268 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+class Factory
+{
+    public int id;
+    public int player;
+    public int cyborgsNum;
+    public int cyborgsProduction;
+    public override string ToString() => $"F-{player}) {id} [{cyborgsNum}] ({cyborgsProduction})";
+}
+
+class Troop
+{
+    public int id;
+    public int player;
+    public int from;
+    public int to;
+    public int cyborgsNum;
+    public int roundsToGo;
+    public override string ToString() => $"T-{player}) {id} {from} -> {to} [{cyborgsNum}] ({roundsToGo})";
+}
+
+class Player
+{
+    #region Auxilary methods
+    static void TryCatch(Action a) { try { a(); } catch (Exception) { } }
+    static int TryGetInt(Func<int> a) { try { return a(); } catch (Exception) { return 0; } }
+    static void Deb(object o) => Console.Error.WriteLine(o);
+    static void DebList(IEnumerable<object> e) => Console.Error.WriteLine(e.Aggregate((x, y) => $"{x} {y}"));
+    static void DebObjList(IEnumerable<object> e) => TryCatch(() => Console.Error.WriteLine(e.Aggregate((x, y) => $"{x}\n{y}")));
+    static void DebDict(Dictionary<int, int> d)
+    {
+        foreach (var pair in d)
+            Console.Error.WriteLine($"[{pair.Key}]:{pair.Value}");
+    }
+    #endregion
+
+    #region Static global game state
+    static int[,] MAP;
+    static List<Factory> factories;
+    static List<Troop> troops;
+    static int BombesLeft = 2;
+    static int BombesCoolDown = 0;
+    static List<int> underBombing = new List<int>();
+    #endregion
+
+    static bool CanBomb() => (BombesLeft > 0 && BombesCoolDown < 10);
+
+    static int? NeedToBomb()
+    {
+        if (BombesLeft == 0) // No money, no party
+            return null;
+        var factoryDestinations = factories.Where(x => x.player == -1);
+        if (factoryDestinations.Count() == 1 && BombesCoolDown <= 0)
+        {
+            BombesLeft--;
+            BombesCoolDown = 11;
+            //Deb("1st condition bombing (early prevention)");
+            return factoryDestinations.FirstOrDefault().id;
+        }
+        if (BombesCoolDown > 0)
+        {
+            BombesCoolDown--;
+            //Deb("No bombing (cooldown)");
+            return null;
+        }
+        else
+        {
+            int? target = null;
+            int score = int.MinValue;
+            foreach (var factory in factoryDestinations)
+            {
+                int tmpscore = factory.cyborgsProduction * 5 + factory.cyborgsProduction;
+                if (tmpscore > score)
+                {
+                    score = tmpscore;
+                    target = factory.id;
+                }
+            }
+            if (target != null)
+            {
+                BombesLeft--;
+                BombesCoolDown = 11;
+                //Deb("2nd condition bombing (too crowded)");
+                return target;
+            }
+        }
+        return null;
+    }
+
+    static int? NeedToImprove()
+    {
+        try
+        {
+            int myScore = factories.Where(x => x.player == 1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y);
+            int rivalScore = factories.Where(x => x.player == -1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y);
+            if (myScore > 2 * rivalScore)
+            {
+                var myFractoriesToImprove = factories.Where(x => x.player == 1 && x.cyborgsNum > 10 && x.cyborgsProduction < 3).FirstOrDefault();
+                return myFractoriesToImprove?.id;
+            }
+        }
+        catch (Exception e) { Deb(e); }
+        return null;
+    }
+
+    static Dictionary<int, int> BestAttackDestination()
+    {
+        var factoryDestinations = factories.Where(x => x.player != 1);
+        var result = new Dictionary<int, int>();
+        foreach (var factory in factoryDestinations)
+        {
+            int newScore = 5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0) // want
+                             - factory.cyborgsNum        // fear
+                             + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id]))); // can
+            //Deb($"[{factory.id}] = {5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0)} - {factory.cyborgsNum} + {(factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id])))} = {newScore}");
+            result[factory.id] = newScore;
+        }
+        return result;
+    }
+
+    static Dictionary<int, int> BestDefenseDestination()
+    {
+        var factoryDestinations = factories.Where(x => x.player == 1);
+        var result = new Dictionary<int, int>();
+        foreach (var factory in factoryDestinations)
+        {
+            int newScore = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == factory.id).Sum(x => x.cyborgsNum))) // fear
+                           - (factory.cyborgsProduction + ((factory.cyborgsProduction == 0) ? 1000 : 0)) // need
+                           - factory.cyborgsNum;        // can
+            //Deb($"[{factory.id}] = {TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == factory.id).Sum(x => x.cyborgsNum)))} - {(factory.cyborgsProduction + ((factory.cyborgsProduction == 0) ? 1000 : 0))} - {factory.cyborgsNum} = {newScore}");
+            if (newScore > 0)
+                result[factory.id] = newScore;
+        }
+        return result;
+    }
+
+    static List<string> ActionForDefenseMove(Dictionary<int, int> defenseMoves)
+    {
+        var actions = new List<string>();
+        foreach (var factoryToDefend in defenseMoves)
+        {
+
+        }
+        return actions;
+    }
+
+    static List<string> ActionForAttackMove(Dictionary<int, int> attackMoves)
+    {
+        var actions = new List<string>();
+        BombesCoolDown--;
+        int? improve = NeedToImprove();
+        if (improve != null)
+            actions.Add($"INC {improve}");
+
+        var myFactories = factories.Where(x => x.player == 1);
+        foreach (var dest in attackMoves.OrderBy(x => -x.Value))
+        {
+            int presentBots = factories.Where(x => x.id == dest.Key).FirstOrDefault().cyborgsNum;
+            int productionBots = TryGetInt(() => factories.Where(x => x.id == dest.Key && x.player == -1).FirstOrDefault().cyborgsProduction * 3);
+            int enemySendBots = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
+            int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
+            int neededBots = presentBots + productionBots + enemySendBots - mySendBots + 1;
+            if (neededBots < 0)
+                neededBots = 0;
+            int initNeededBots = neededBots;
+            int canSend = 0;
+            var batchActions = new List<string>();
+            bool willBomb = false;
+            if (CanBomb() && neededBots > 9 && !underBombing.Contains(dest.Key))
+            {
+                Deb($"CanBomb {CanBomb()}");
+                batchActions.Add($"BOMB {factories.Where(x => x.player == 1).FirstOrDefault().id} {dest.Key}");
+                neededBots -= 10;
+                canSend += 10;
+                willBomb = true;
+            }
+            foreach (var myfactory in factories.Where(x => x.player == 1).OrderBy(x => MAP[x.id, dest.Key]))
+            {
+                if (myfactory.cyborgsNum > neededBots + myfactory.cyborgsProduction + 1)
+                {
+                    batchActions.Add($"MOVE {myfactory.id} {dest.Key} {neededBots}");
+                    canSend += neededBots;
+                    neededBots = 0;
+                    myfactory.cyborgsNum -= neededBots;
+                }
+                else if (myfactory.cyborgsNum > myfactory.cyborgsProduction + 1)
+                {
+                    batchActions.Add($"MOVE {myfactory.id} {dest.Key} {myfactory.cyborgsNum - myfactory.cyborgsProduction - 1}");
+                    canSend += myfactory.cyborgsNum - myfactory.cyborgsProduction - 1;
+                    neededBots -= myfactory.cyborgsNum - myfactory.cyborgsProduction - 1;
+                    myfactory.cyborgsNum = myfactory.cyborgsProduction + 1;
+                }
+                if (neededBots == 0)
+                    break;
+            }
+            if (canSend < initNeededBots && (factories.Where(x => x.id == dest.Key).FirstOrDefault()).player != -1)
+            {
+                willBomb = false;
+                batchActions = new List<string>();
+            }
+            if (willBomb)
+            {
+                underBombing.Add(dest.Key);
+                BombesLeft--;
+                BombesCoolDown = 10;
+            }
+            actions.AddRange(batchActions);
+            //Deb($"[{dest.Key}]: Need {initNeededBots} ({presentBots}+{productionBots}+{enemySendBots}-{mySendBots}+1). Can send {canSend}");
+        }
+        return actions;
+    }
+
+    static void Main(string[] args)
+    {
+        string[] inputs;
+        int factoryCount = int.Parse(Console.ReadLine());
+        MAP = new int[factoryCount, factoryCount];
+        int linkCount = int.Parse(Console.ReadLine());
+        for (int i = 0; i < linkCount; i++)
+        {
+            inputs = Console.ReadLine().Split(' ');
+            int factory1 = int.Parse(inputs[0]);
+            int factory2 = int.Parse(inputs[1]);
+            int distance = int.Parse(inputs[2]);
+            MAP[factory1, factory2] = MAP[factory2, factory1] = distance;
+        }
+        while (true)
+        {
+            factories = new List<Factory>();
+            troops = new List<Troop>();
+            int entityCount = int.Parse(Console.ReadLine());
+            for (int i = 0; i < entityCount; i++)
+            {
+                inputs = Console.ReadLine().Split(' ');
+                int entityId = int.Parse(inputs[0]);
+                string entityType = inputs[1];
+                int arg1 = int.Parse(inputs[2]);
+                int arg2 = int.Parse(inputs[3]);
+                int arg3 = int.Parse(inputs[4]);
+                int arg4 = int.Parse(inputs[5]);
+                int arg5 = int.Parse(inputs[6]);
+                if (entityType == "FACTORY")
+                    factories.Add(new Factory() { id = entityId, player = arg1, cyborgsNum = arg2, cyborgsProduction = arg3 });
+                if (entityType == "TROOP")
+                    troops.Add(new Troop() { id = entityId, player = arg1, from = arg2, to = arg3, cyborgsNum = arg4, roundsToGo = arg5 });
+            }
+
+            var defenseMoves = BestDefenseDestination();
+            DebDict(defenseMoves);
+            var attackMoves = BestAttackDestination();
+            int bestAttack = attackMoves.OrderBy(x => x.Value).Select(x => x.Key).LastOrDefault();
+            string message = "MSG " + (attackMoves.Count == 0 ? "No good attack" : $"All attack the capitalists in {bestAttack}");
+            if (attackMoves.Count == 0)
+                Console.WriteLine($"WAIT;{message}");
+            else
+            {
+                var moves = ActionForAttackMove(attackMoves);
+                if (moves.Count == 0)
+                    Console.WriteLine($"WAIT;{message}");
+                else
+                    Console.WriteLine(moves.Aggregate((x, y) => $"{x};{y}") + ";" + message);
+            }
+        }
+    }
+}
