@@ -99,7 +99,7 @@ class Player
                           + TryGetInt(() => troops.Where(x => x.player == 1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y));
             int rivalScore = factories.Where(x => x.player == -1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y)
                           + TryGetInt(() => troops.Where(x => x.player == -1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y));
-            if (myScore > 2 * rivalScore)
+            if (myScore > 2 * rivalScore || Step > 25)
             {
                 var myFractoriesToImprove = factories.Where(x => x.player == 1 && x.cyborgsNum > 10 && x.cyborgsProduction < 3).FirstOrDefault();
                 return myFractoriesToImprove?.id;
@@ -112,15 +112,15 @@ class Player
     static Dictionary<int, int> BestAttackDestination()
     {
         var factoryDestinations = factories.Where(x => x.player != 1
-                                                    && x.cyborgsProduction > 0
+                                                    && (x.cyborgsProduction > 0 || Step > 100)  // if STEP > 100 than probably the end of the game
                                                   // && (Step > 4 || MAP[x.id, RivalBaseId] >= MAP[x.id, MyBaseId])
                                                   );
         var result = new Dictionary<int, int>();
         foreach (var factory in factoryDestinations)
         {
-            int newScore = 5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0) // want
+            int newScore = 6 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0) // want
                              - factory.cyborgsNum        // fear
-                             + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id]))); // can
+                             + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id]*2))); // can
             //Deb($"[{factory.id}] = {5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0)} - {factory.cyborgsNum} + {(factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id])))} = {newScore}");
             result[factory.id] = newScore;
         }
@@ -206,7 +206,7 @@ class Player
             }
             foreach (var myfactory in factories.Where(x => x.player == 1).OrderBy(x => MAP[x.id, dest.Key]))
             {
-                if (myfactory.cyborgsNum > 2 * neededBots + 1)
+                if (myfactory.cyborgsNum > 2 * neededBots + 1 && neededBots > 4)
                 {
                     batchActions.Add($"MOVE {myfactory.id} {dest.Key} {2 * neededBots}");
                     canSend += 2 * neededBots;
@@ -239,7 +239,7 @@ class Player
             {
                 underBombing.Add(dest.Key);
                 BombesLeft--;
-                BombesCoolDown = 15;
+                BombesCoolDown = 10;
             }
             actions.AddRange(batchActions);
             Deb($"[{dest.Key}({dest.Value})]: Need {initNeededBots} ({presentBots}+{productionBots}+{enemySendBots}-{mySendBots}+1). Can send {canSend}");
