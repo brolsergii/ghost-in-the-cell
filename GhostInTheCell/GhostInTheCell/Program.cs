@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -178,7 +178,7 @@ class Player
             int presentBots = factories.Where(x => x.id == dest.Key).FirstOrDefault().cyborgsNum;
             int productionBots = TryGetInt(() => factories.Where(x => x.id == dest.Key && x.player == -1).FirstOrDefault().cyborgsProduction * 3);
             int enemySendBots = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
-            int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum - x.roundsToGo / 2)?.Aggregate((x, y) => x + y) ?? 0));
+            int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum - x.roundsToGo)?.Aggregate((x, y) => x + y) ?? 0));
             int neededBots = presentBots + productionBots + enemySendBots - mySendBots + 1;
             if (neededBots < 0)
                 neededBots = 0;
@@ -187,7 +187,7 @@ class Player
             var batchActions = new List<string>();
 
             bool willBomb = false;
-            if (CanBomb() && neededBots > 9 && !underBombing.Contains(dest.Key))
+            if (CanBomb() && neededBots > 9 && !underBombing.Contains(dest.Key) && (factories.Where(x => x.id == dest.Key).FirstOrDefault().player==-1))
             {
                 //Deb($"CanBomb {CanBomb()}");
                 batchActions.Add($"BOMB {factories.Where(x => x.player == 1).FirstOrDefault().id} {dest.Key}");
