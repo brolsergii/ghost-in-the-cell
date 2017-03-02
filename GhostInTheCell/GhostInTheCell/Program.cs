@@ -113,14 +113,14 @@ class Player
     {
         var factoryDestinations = factories.Where(x => x.player != 1
                                                     && (x.cyborgsProduction > 0 || Step > 100)  // if STEP > 100 than probably the end of the game
-                                                  // && (Step > 4 || MAP[x.id, RivalBaseId] >= MAP[x.id, MyBaseId])
+                                                                                                // && (Step > 4 || MAP[x.id, RivalBaseId] >= MAP[x.id, MyBaseId])
                                                   );
         var result = new Dictionary<int, int>();
         foreach (var factory in factoryDestinations)
         {
             int newScore = 6 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0) // want
                              - factory.cyborgsNum        // fear
-                             + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id]*2))); // can
+                             + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id] * 2))); // can
             //Deb($"[{factory.id}] = {5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0)} - {factory.cyborgsNum} + {(factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id])))} = {newScore}");
             result[factory.id] = newScore;
         }
@@ -188,7 +188,8 @@ class Player
             int productionBots = TryGetInt(() => factories.Where(x => x.id == dest.Key && x.player == -1).FirstOrDefault().cyborgsProduction * 3);
             int enemySendBots = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
             int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum - x.roundsToGo)?.Aggregate((x, y) => x + y) ?? 0));
-            int neededBots = presentBots + productionBots + enemySendBots - mySendBots + 1;
+            int distance = TryGetInt(() => factories.Where(x => x.player == 1).Select(x => x.id).Aggregate((x, y) => x + MAP[y, dest.Key])) / myFactories.Count();
+            int neededBots = presentBots + productionBots + enemySendBots - mySendBots + distance;
             if (neededBots < 0)
                 neededBots = 0;
             int initNeededBots = neededBots;
@@ -206,7 +207,7 @@ class Player
             }
             foreach (var myfactory in factories.Where(x => x.player == 1).OrderBy(x => MAP[x.id, dest.Key]))
             {
-                if (myfactory.cyborgsNum > 2 * neededBots + 1 && neededBots > 4)
+                if (myfactory.cyborgsNum > 2 * neededBots && neededBots > 4)
                 {
                     batchActions.Add($"MOVE {myfactory.id} {dest.Key} {2 * neededBots}");
                     canSend += 2 * neededBots;
