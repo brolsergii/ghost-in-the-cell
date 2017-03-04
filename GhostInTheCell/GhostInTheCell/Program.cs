@@ -46,7 +46,9 @@ class Player
     static int Step = 0;
     static int RivalBaseId = 0;
     static int MyBaseId = 0;
-
+    static int RivalProduction = 0;
+    static int MyProduction = 0;
+    static bool myUnderBombing = false;
     static List<int> underBombing = new List<int>();
     #endregion
 
@@ -101,7 +103,7 @@ class Player
                           + TryGetInt(() => troops.Where(x => x.player == -1).Select(x => x.cyborgsNum).Aggregate((x, y) => x + y));
             if (myScore > 2 * rivalScore || Step > 25)
             {
-                var myFractoriesToImprove = factories.Where(x => x.player == 1 && x.cyborgsNum > 10 && x.cyborgsProduction < 3).FirstOrDefault();
+                var myFractoriesToImprove = factories.Where(x => x.player == 1 && x.cyborgsNum > 11 && x.cyborgsProduction < 3).FirstOrDefault();
                 return myFractoriesToImprove?.id;
             }
         }
@@ -115,13 +117,14 @@ class Player
                                                     && (x.cyborgsProduction > 0 || Step > 100)  // if STEP > 100 than probably the end of the game
                                                                                                 // && (Step > 4 || MAP[x.id, RivalBaseId] >= MAP[x.id, MyBaseId])
                                                   );
+        Deb("Attack calc");
         var result = new Dictionary<int, int>();
         foreach (var factory in factoryDestinations)
         {
             int newScore = 6 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0) // want
                              - factory.cyborgsNum        // fear
                              + (factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id] * 2))); // can
-            //Deb($"[{factory.id}] = {5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0)} - {factory.cyborgsNum} + {(factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id])))} = {newScore}");
+            Deb($"[{factory.id}] = {5 * factory.cyborgsProduction - ((factory.cyborgsProduction == 0) ? 1000 : 0)} - {factory.cyborgsNum} + {(factories.Where(x => x.player == 1).Sum(x => x.cyborgsNum - (int)(MAP[x.id, factory.id])))} = {newScore}");
             result[factory.id] = newScore;
         }
         return result;
@@ -131,12 +134,13 @@ class Player
     {
         var factoryDestinations = factories.Where(x => x.player == 1);
         var result = new Dictionary<int, int>();
+        Deb("Defense calc");
         foreach (var factory in factoryDestinations)
         {
             int newScore = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == factory.id).Sum(x => x.cyborgsNum))) // fear
                            - (factory.cyborgsProduction + ((factory.cyborgsProduction == 0) ? 1000 : 0)) // need
                            - factory.cyborgsNum;        // can
-            //Deb($"[{factory.id}] = {TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == factory.id).Sum(x => x.cyborgsNum)))} - {(factory.cyborgsProduction + ((factory.cyborgsProduction == 0) ? 1000 : 0))} - {factory.cyborgsNum} = {newScore}");
+            Deb($"[{factory.id}] = {TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == factory.id).Sum(x => x.cyborgsNum)))} - {(factory.cyborgsProduction + ((factory.cyborgsProduction == 0) ? 1000 : 0))} - {factory.cyborgsNum} = {newScore}");
             if (newScore > 0)
                 result[factory.id] = newScore;
         }
@@ -177,9 +181,6 @@ class Player
     {
         var actions = new List<string>();
         BombesCoolDown--;
-        int? improveId = NeedToImprove();
-        if (improveId != null)
-            actions.Add($"INC {improveId}");
 
         var myFactories = factories.Where(x => x.player == 1);
         foreach (var dest in attackMoves.OrderByDescending(x => x.Value))
@@ -188,8 +189,9 @@ class Player
             int productionBots = TryGetInt(() => factories.Where(x => x.id == dest.Key && x.player == -1).FirstOrDefault().cyborgsProduction * 3);
             int enemySendBots = TryGetInt(() => (troops.Where(x => x.player == -1 && x.to == dest.Key)?.Select(x => x.cyborgsNum)?.Aggregate((x, y) => x + y) ?? 0));
             int mySendBots = TryGetInt(() => (troops.Where(x => x.player == 1 && x.to == dest.Key)?.Select(x => x.cyborgsNum - x.roundsToGo)?.Aggregate((x, y) => x + y) ?? 0));
-            int distance = TryGetInt(() => factories.Where(x => x.player == 1).Select(x => x.id).Aggregate((x, y) => x + MAP[y, dest.Key])) / myFactories.Count();
-            int neededBots = presentBots + productionBots + enemySendBots - mySendBots + distance;
+            int distance = TryGetInt(() => factories.Where(x => x.player == 1).Select(x => x.id).Aggregate((x, y) => x + MAP[y, dest.Key]) / myFactories.Count());
+            //int stepAdd = Step / 40; // With time troops should be bigger 
+            int neededBots = presentBots + productionBots + enemySendBots - mySendBots + distance;// + stepAdd;
             if (neededBots < 0)
                 neededBots = 0;
             int initNeededBots = neededBots;
@@ -202,7 +204,6 @@ class Player
                 //Deb($"CanBomb {CanBomb()}");
                 batchActions.Add($"BOMB {factories.Where(x => x.player == 1).FirstOrDefault().id} {dest.Key}");
                 neededBots -= 10;
-                canSend += 10;
                 willBomb = true;
             }
             foreach (var myfactory in factories.Where(x => x.player == 1).OrderBy(x => MAP[x.id, dest.Key]))
@@ -234,6 +235,7 @@ class Player
             if (canSend < initNeededBots && (factories.Where(x => x.id == dest.Key).FirstOrDefault()).player != -1)
             {
                 willBomb = false;
+                canSend = 0;
                 batchActions = new List<string>();
             }
             if (willBomb)
@@ -245,6 +247,11 @@ class Player
             actions.AddRange(batchActions);
             Deb($"[{dest.Key}({dest.Value})]: Need {initNeededBots} ({presentBots}+{productionBots}+{enemySendBots}-{mySendBots}+1). Can send {canSend}");
         }
+        /* Not top prio */
+        int? improveId = NeedToImprove();
+        if (improveId != null)
+            actions.Add($"INC {improveId}");
+
         return actions;
     }
 
@@ -268,6 +275,7 @@ class Player
             factories = new List<Factory>();
             troops = new List<Troop>();
             int entityCount = int.Parse(Console.ReadLine());
+            myUnderBombing = false;
             for (int i = 0; i < entityCount; i++)
             {
                 inputs = Console.ReadLine().Split(' ');
@@ -282,6 +290,8 @@ class Player
                     factories.Add(new Factory() { id = entityId, player = arg1, cyborgsNum = arg2, cyborgsProduction = arg3 });
                 if (entityType == "TROOP")
                     troops.Add(new Troop() { id = entityId, player = arg1, from = arg2, to = arg3, cyborgsNum = arg4, roundsToGo = arg5 });
+                if (entityType == "BOMB" && arg1 == -1)
+                    myUnderBombing = true;
             }
             if (Step == 0)
             {
@@ -289,20 +299,23 @@ class Player
                 MyBaseId = factories.Where(x => x.player == 1).FirstOrDefault().id;
                 Deb($"My base {MyBaseId}; rival base {RivalBaseId}");
             }
+            RivalProduction = TryGetInt(() => factories.Where(x => x.player == -1).Select(x => x.cyborgsProduction).Aggregate((x, y) => x + y));
+            MyProduction = TryGetInt(() => factories.Where(x => x.player == 1).Select(x => x.cyborgsProduction).Aggregate((x, y) => x + y));
+            message = $"MSG myProd {MyProduction}, rivalProd {RivalProduction}, b {myUnderBombing}";
             var defenseMoves = BestDefenseDestination();
             var attackMoves = BestAttackDestination();
             if (attackMoves.Count == 0 && defenseMoves.Count == 0)
                 Console.WriteLine($"WAIT;{message}");
             else
             {
-                var dmoves = ActionForDefenseMove(defenseMoves);
-                var amoves = ActionForAttackMove(attackMoves);
-                if (amoves.Count == 0 && dmoves.Count == 0)
+                var firstmoves = ActionForDefenseMove(defenseMoves);
+                var secondarymoves = ActionForAttackMove(attackMoves);
+                if (secondarymoves.Count == 0 && firstmoves.Count == 0)
                     Console.WriteLine($"WAIT;{message}");
                 else
                 {
-                    dmoves.AddRange(amoves);
-                    Console.WriteLine(dmoves.Aggregate((x, y) => $"{x};{y}") + ";" + message);
+                    firstmoves.AddRange(secondarymoves);
+                    Console.WriteLine(firstmoves.Aggregate((x, y) => $"{x};{y}") + ";" + message);
                 }
             }
             Step++;
